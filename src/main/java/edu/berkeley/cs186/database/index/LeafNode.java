@@ -171,6 +171,9 @@ class LeafNode extends BPlusNode {
         Page
         getPage
         * */
+        if (this.keys.contains(key)) {
+            throw new BPlusTreeException("inserting duplicate leaf nodes with the same key");
+        }
         int ord = metadata.getOrder();
         int index = InnerNode.numLessThanEqual(key, keys);
         keys.add(index, key);
@@ -190,7 +193,6 @@ class LeafNode extends BPlusNode {
         rightSibling = Optional.of(newSplitedRightNode.getPage().getPageNum());//
         sync();
         return Optional.of(new Pair<DataBox, Long>(rightKeys.get(0), newSplitedRightNode.getPage().getPageNum()));
-
     }
 
     // See BPlusNode.bulkLoad.
@@ -199,7 +201,27 @@ class LeafNode extends BPlusNode {
             float fillFactor) {
         // TODO(proj2): implement
 
-        return Optional.empty();
+        int ord = metadata.getOrder();
+        int maxRecords = (int)Math.ceil(fillFactor * metadata.getOrder() * 2);
+        while (keys.size() < maxRecords && data.hasNext()) {
+            Pair<DataBox, RecordId> p = data.next();
+            keys.add(p.getFirst());
+            rids.add(p.getSecond());
+        }
+        Optional<Pair<DataBox, Long>> ret = Optional.empty();
+        if (data.hasNext()) {
+            List<DataBox> newKeys = new ArrayList<>();
+            List<RecordId> newRids = new ArrayList<>();
+            Pair<DataBox, RecordId> p = data.next();
+            newKeys.add(p.getFirst());
+            newRids.add(p.getSecond());
+            LeafNode newSplitedRightNode = new LeafNode(metadata, bufferManager, newKeys,
+                    newRids, rightSibling, treeContext);//
+            rightSibling = Optional.of(newSplitedRightNode.getPage().getPageNum());//
+            ret = Optional.of(new Pair(p.getFirst(), rightSibling.get()));
+        }
+        sync();
+        return ret;
     }
 
     // See BPlusNode.remove.

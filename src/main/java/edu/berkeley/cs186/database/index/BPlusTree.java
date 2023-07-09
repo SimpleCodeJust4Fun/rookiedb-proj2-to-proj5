@@ -204,7 +204,7 @@ public class BPlusTree {
 
         // TODO(proj2): Return a BPlusTreeIterator.
 
-        return Collections.emptyIterator();
+        return new BPlusTreeIterator(root.getLeftmostLeaf());
     }
 
     /**
@@ -236,8 +236,8 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): Return a BPlusTreeIterator.
-
-        return Collections.emptyIterator();
+        LeafNode startNode = root.get(key);
+        return new BPlusTreeIterator(startNode, key);
     }
 
     private void splitRoot(DataBox key, Long childNodePageNum) {
@@ -304,7 +304,15 @@ public class BPlusTree {
         // Note: You should NOT update the root variable directly.
         // Use the provided updateRoot() helper method to change
         // the tree's root if the old root splits.
-
+        if (scanAll().hasNext()) {
+            throw new RuntimeException("builkLoad show be called in an empty tree");
+        }
+        while (data.hasNext()) {
+            Optional<Pair<DataBox, Long>> splitInfo = root.bulkLoad(data, fillFactor);
+            if (splitInfo.isPresent()) {
+                splitRoot(splitInfo.get().getFirst(), splitInfo.get().getSecond());
+            }
+        }
         return;
     }
 
@@ -439,19 +447,48 @@ public class BPlusTree {
     // Iterator ////////////////////////////////////////////////////////////////
     private class BPlusTreeIterator implements Iterator<RecordId> {
         // TODO(proj2): Add whatever fields and constructors you want here.
+        LeafNode curNode;
+
+        Iterator<RecordId> curIter;
+
+        BPlusTreeIterator(LeafNode node) {
+            curNode = node;
+            curIter = curNode.scanAll();
+        }
+
+        BPlusTreeIterator(LeafNode node, DataBox key) {
+            curNode = node;
+            curIter = curNode.scanGreaterEqual(key);
+        }
 
         @Override
         public boolean hasNext() {
             // TODO(proj2): implement
-
-            return false;
+            // 对于hasNext()，如果curIterator.hasNext()返回true，则直接返回。
+            // 否则就代表当前叶子结点的记录已经被遍历完了，检查是否还有右兄弟结点，
+            // 没有就返回false。有就根据迭代器的类型获取指定的迭代器，然后返回迭代器的情况。
+            if (curIter.hasNext()) {
+                return true;
+            } else {
+                Optional<LeafNode> rightSiblingInfo = curNode.getRightSibling();
+                if (rightSiblingInfo.isPresent()) {
+                    curNode = rightSiblingInfo.get();
+                    curIter = curNode.scanAll();
+                    return true;
+                } else {
+                    return false;
+                }
+            }
         }
 
         @Override
         public RecordId next() {
             // TODO(proj2): implement
-
-            throw new NoSuchElementException();
+            if (curIter.hasNext()) {
+                return curIter.next();
+            } else {
+                throw new NoSuchElementException();
+            }
         }
     }
 }

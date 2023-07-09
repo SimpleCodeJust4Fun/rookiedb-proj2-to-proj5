@@ -99,13 +99,13 @@ class InnerNode extends BPlusNode {
         int index = InnerNode.numLessThanEqual(splitKey, keys);
         keys.add(index, splitKey);
         children.add(index + 1, childNodePageNum);//why?
-        int d = metadata.getOrder() * 2;
+        int d = metadata.getOrder();
         if(keys.size() <= d * 2){
             // Case 1: If inserting the pair (splitKey, childNodePageNum) does not cause leaf overflow
             sync();
             return Optional.empty();
         } else {
-            // Case 1: If inserting the pair (splitKey, childNodePageNum) causes Node n overflow,
+            // Case 2: If inserting the pair (splitKey, childNodePageNum) causes Node n overflow,
             // a pair (split_key, right_node_page_num) is returned.
             DataBox retKey = keys.get(d);
             List<DataBox> rightKeys = keys.subList(d + 1, 2 * d + 1); // 2 * d + 1 = keys.size()
@@ -148,8 +148,24 @@ class InnerNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
         // TODO(proj2): implement
-
-        return Optional.empty();
+        BPlusNode rightMostChild = BPlusNode.fromBytes(metadata, bufferManager, treeContext, children.get(children.size() - 1));
+        Optional<Pair<DataBox, Long>> splitInfo = rightMostChild.bulkLoad(data, fillFactor);
+        if (!splitInfo.isPresent()){
+            // rightmost child not split
+            return splitInfo;
+        } else {
+            // rightmost chile split
+            DataBox splitKey = splitInfo.get().getFirst();
+            Long childNodePageNum = splitInfo.get().getSecond();
+            Optional<Pair<DataBox, Long>> mySplitInfo = insert(splitKey, childNodePageNum);
+            if (!mySplitInfo.isPresent()) {
+                // this inner node split
+                return this.bulkLoad(data, fillFactor);
+            } else {
+                // this inner node not split
+                return mySplitInfo;
+            }
+        }
     }
 
     // See BPlusNode.remove.
