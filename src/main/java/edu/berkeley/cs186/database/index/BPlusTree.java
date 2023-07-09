@@ -11,6 +11,7 @@ import edu.berkeley.cs186.database.io.DiskSpaceManager;
 import edu.berkeley.cs186.database.memory.BufferManager;
 import edu.berkeley.cs186.database.table.RecordId;
 
+import javax.xml.crypto.Data;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -239,6 +240,18 @@ public class BPlusTree {
         return Collections.emptyIterator();
     }
 
+    private void splitRoot(DataBox key, Long childNodePageNum) {
+        // split the current root to 2 children and create a new root as the father of these children
+        List<DataBox> keys = new ArrayList<>();
+        List<Long> children = new ArrayList<>();
+
+        keys.add(key); // insert split_key into the new root
+        children.add(root.getPage().getPageNum()); // left child : original root
+        children.add(childNodePageNum); // right child : new_split node
+        BPlusNode newRoot = new InnerNode(metadata, bufferManager, keys, children, lockContext);
+        updateRoot(newRoot);
+    }
+
     /**
      * Inserts a (key, rid) pair into a B+ tree. If the key already exists in
      * the B+ tree, then the pair is not inserted and an exception is raised.
@@ -257,7 +270,10 @@ public class BPlusTree {
         // Note: You should NOT update the root variable directly.
         // Use the provided updateRoot() helper method to change
         // the tree's root if the old root splits.
-
+        Optional<Pair<DataBox, Long>> splitInfo = root.put(key ,rid);
+        if (splitInfo.isPresent()){
+            splitRoot(splitInfo.get().getFirst(), splitInfo.get().getSecond());
+        }
         return;
     }
 
