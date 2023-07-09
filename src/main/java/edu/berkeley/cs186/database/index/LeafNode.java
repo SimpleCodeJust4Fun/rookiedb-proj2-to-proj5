@@ -148,7 +148,7 @@ class LeafNode extends BPlusNode {
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
 
-        return null;
+        return this;
     }
 
     // See BPlusNode.getLeftmostLeaf.
@@ -156,15 +156,41 @@ class LeafNode extends BPlusNode {
     public LeafNode getLeftmostLeaf() {
         // TODO(proj2): implement
 
-        return null;
+        return this;
     }
 
     // See BPlusNode.put.
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
+        // 分情况讨论即可，分裂和不分裂的情况，
+        /*
+        Optional：
+        Databox：
+        Rids
+        Page
+        getPage
+        * */
+        int ord = metadata.getOrder();
+        int index = InnerNode.numLessThanEqual(key, keys);
+        keys.add(index, key);
+        rids.add(index, rid);
+        if (keys.size() < 2 * ord+ 1){
+            sync();
+            return Optional.empty();
+        }
+        List<DataBox> leftKeys = keys.subList(0, ord);
+        List<RecordId> leftRids = rids.subList(0, ord);
+        List<DataBox> rightKeys = keys.subList(ord, 2 * ord + 1);
+        List<RecordId> rightRids = rids.subList(ord, 2 * ord + 1);
+        LeafNode newSplitedRightNode = new LeafNode(metadata, bufferManager, rightKeys,
+                rightRids, rightSibling, treeContext);//
+        this.keys = leftKeys;
+        this.rids = leftRids;
+        rightSibling = Optional.of(newSplitedRightNode.getPage().getPageNum());//
+        sync();
+        return Optional.of(new Pair<DataBox, Long>(rightKeys.get(0), newSplitedRightNode.getPage().getPageNum()));
 
-        return Optional.empty();
     }
 
     // See BPlusNode.bulkLoad.
@@ -180,7 +206,12 @@ class LeafNode extends BPlusNode {
     @Override
     public void remove(DataBox key) {
         // TODO(proj2): implement
-
+        int index = keys.indexOf(key);
+        if (index >= 0){
+            keys.remove(index);
+            rids.remove(index);
+            sync();
+        }
         return;
     }
 
@@ -376,8 +407,28 @@ class LeafNode extends BPlusNode {
         // Note: LeafNode has two constructors. To implement fromBytes be sure to
         // use the constructor that reuses an existing page instead of fetching a
         // brand new one.
+        Page page = bufferManager.fetchPage(treeContext, pageNum);
+        Buffer buf = page.getBuffer();
 
-        return null;
+        byte nodeType = buf.get();
+        assert(nodeType == (byte) 1);
+
+        List<DataBox> keys = new ArrayList<>();
+        List<RecordId> rids = new ArrayList<>();
+        Long pageIdOfRightSibling = buf.getLong();
+        Optional<Long> rightSibling;
+        if (pageIdOfRightSibling == -1){
+            rightSibling = Optional.empty();
+        }else{
+            rightSibling = Optional.of(pageIdOfRightSibling);
+        }
+
+        int numberOfRightSibling = buf.getInt();
+        for (int i = 0; i < numberOfRightSibling; ++i) {
+            keys.add(DataBox.fromBytes(buf, metadata.getKeySchema()));
+            rids.add(RecordId.fromBytes(buf));
+        }
+        return new LeafNode(metadata, bufferManager, page, keys, rids, rightSibling, treeContext);
     }
 
     // Builtins ////////////////////////////////////////////////////////////////

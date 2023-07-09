@@ -81,8 +81,9 @@ class InnerNode extends BPlusNode {
     @Override
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
-
-        return null;
+        int index = numLessThanEqual(key, keys);
+        BPlusNode child = getChild(index);
+        return child.get(key);
     }
 
     // See BPlusNode.getLeftmostLeaf.
@@ -91,15 +92,55 @@ class InnerNode extends BPlusNode {
         assert(children.size() > 0);
         // TODO(proj2): implement
 
-        return null;
+        return getChild(0).getLeftmostLeaf();
+    }
+
+    private Optional<Pair<DataBox, Long>> insert(DataBox splitKey, Long childNodePageNum) {
+        int index = InnerNode.numLessThanEqual(splitKey, keys);
+        keys.add(index, splitKey);
+        children.add(index + 1, childNodePageNum);//why?
+        int d = metadata.getOrder() * 2;
+        if(keys.size() <= d * 2){
+            // Case 1: If inserting the pair (splitKey, childNodePageNum) does not cause leaf overflow
+            sync();
+            return Optional.empty();
+        } else {
+            // Case 1: If inserting the pair (splitKey, childNodePageNum) causes Node n overflow,
+            // a pair (split_key, right_node_page_num) is returned.
+            DataBox retKey = keys.get(d);
+            List<DataBox> rightKeys = keys.subList(d + 1, 2 * d + 1); // 2 * d + 1 = keys.size()
+            List<Long> rightChildren = children.subList(d + 1, 2 * d + 2); // 2 * d + 2 = children.size()
+
+            List<DataBox> leftKeys = keys.subList(0, d); //
+            List<Long> leftChildren = children.subList(0, d + 1); // why bigger by 1?
+            this.keys = leftKeys;
+            this.children = leftChildren;
+
+            sync();
+
+            InnerNode newRightSibling = new InnerNode(metadata, bufferManager, rightKeys, rightChildren, treeContext);
+
+            return Optional.of(new Pair<DataBox, Long>(retKey, newRightSibling.getPage().getPageNum()));
+
+        }
     }
 
     // See BPlusNode.put.
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
-
-        return Optional.empty();
+        BPlusNode child = BPlusNode.fromBytes(metadata, bufferManager, treeContext, children.get(numLessThanEqual(key, keys)));
+        Optional<Pair<DataBox, Long>> splitInfo = child.put(key, rid);
+        if(!splitInfo.isPresent()){
+            // child did not split
+            return splitInfo;// return Optional.empty();
+        } else {
+            // child did split, insert the (split_key, child_node_pageNum) into this node
+            Pair<DataBox, Long> info = splitInfo.get();
+            DataBox splitKey = info.getFirst();
+            Long childNodePageNum = info.getSecond();
+            return insert(splitKey, childNodePageNum);
+        }
     }
 
     // See BPlusNode.bulkLoad.
@@ -115,7 +156,9 @@ class InnerNode extends BPlusNode {
     @Override
     public void remove(DataBox key) {
         // TODO(proj2): implement
-
+        LeafNode leaf = get(key);
+        leaf.remove(key);
+        sync();// not necessary? fly pig did not implement if
         return;
     }
 
