@@ -164,13 +164,6 @@ class LeafNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
         // 分情况讨论即可，分裂和不分裂的情况，
-        /*
-        Optional：
-        Databox：
-        Rids
-        Page
-        getPage
-        * */
         if (this.keys.contains(key)) {
             throw new BPlusTreeException("inserting duplicate leaf nodes with the same key");
         }

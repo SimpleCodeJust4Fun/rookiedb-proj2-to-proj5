@@ -117,9 +117,7 @@ class InnerNode extends BPlusNode {
             this.children = leftChildren;
 
             sync();
-
             InnerNode newRightSibling = new InnerNode(metadata, bufferManager, rightKeys, rightChildren, treeContext);
-
             return Optional.of(new Pair<DataBox, Long>(retKey, newRightSibling.getPage().getPageNum()));
 
         }

@@ -87,7 +87,14 @@ public class SortOperator extends QueryOperator {
      */
     public Run sortRun(Iterator<Record> records) {
         // TODO(proj3_part1): implement
-        return null;
+
+        // use an external ArrayList to store and sort the runs
+        List<Record> recordList = new ArrayList<>();
+        while (records.hasNext()) {
+            recordList.add(records.next());
+        }
+        recordList.sort(comparator);
+        return makeRun(recordList);
     }
 
     /**
@@ -108,7 +115,34 @@ public class SortOperator extends QueryOperator {
     public Run mergeSortedRuns(List<Run> runs) {
         assert (runs.size() <= this.numBuffers - 1);
         // TODO(proj3_part1): implement
-        return null;
+        PriorityQueue<Pair<Record, Integer>> pq = new PriorityQueue<>(new RecordPairComparator());
+        List<Iterator<Record>> iterators = new ArrayList<>();
+
+        for (Run run : runs) {
+            iterators.add(run.iterator());
+        }
+        int i = 0;
+        // 获取每个排序段中的最小元素，并将其填入优先队列
+        for (Iterator<Record> iterator : iterators) {
+            if (iterator.hasNext()){
+                pq.add(new Pair<>(iterator.next(), i));
+            }
+            i++;
+        }
+
+        //此处使用优先队列来提取要进入输出排序段的记录，同时在优先队列中，每条记录以<Record, Integer>的形式存储，整型数追踪该记录来源的排序段，
+        // 每当一个记录被送到输出段，就从该记录来源的排序段再提取一个记录放入队列。
+        List<Record> output = new ArrayList<>();
+        while (!pq.isEmpty()) {
+            Pair<Record, Integer> pair = pq.poll();
+            Record record = pair.getFirst();
+            output.add(record);
+            Iterator<Record> it = iterators.get(pair.getSecond());
+            if (it.hasNext()){
+                pq.add(new Pair<>(it.next(), pair.getSecond()));
+            }
+        }
+        return makeRun(output);
     }
 
     /**
@@ -133,7 +167,15 @@ public class SortOperator extends QueryOperator {
      */
     public List<Run> mergePass(List<Run> runs) {
         // TODO(proj3_part1): implement
-        return Collections.emptyList();
+
+        // 调用上面的mergeSortedRuns归并函数，把已经排序的N个run，用大小为numBuffers - 1的缓冲区一次归并完成
+        List<Run> mergedRuns = new ArrayList<>();
+        int len = runs.size();
+        int batch = numBuffers - 1;
+        for (int i = 0; i + batch <= len; i += batch) {
+            mergedRuns.add(mergeSortedRuns((runs.subList(i, Math.min(len, i + batch)))));
+        }
+        return mergedRuns;
     }
 
     /**
@@ -149,7 +191,24 @@ public class SortOperator extends QueryOperator {
         Iterator<Record> sourceIterator = getSource().iterator();
 
         // TODO(proj3_part1): implement
-        return makeRun(); // TODO(proj3_part1): replace this!
+        List<Run> sortedRuns = new ArrayList<>();
+
+        // 外部排序的驱动方法，只需要先按缓冲区大小划分出排序段，然后为每个排序段排序(调用sortRun)，再不断归并，直到只剩下一个排序段。
+        // 以下为flypig的实现，简洁但不易读，可以看这个易读的实现：https://faustpromaxpx.github.io/2022/07/05/rookie-db/#Task-2%EF%BC%9AGHJ
+
+
+        // 把源迭代器内的东西加入并排好序
+        while (sourceIterator.hasNext()) {
+            sortedRuns.add(sortRun(getBlockIterator(sourceIterator, getSchema(), numBuffers)));
+        }
+
+        // 对排序结果进行归并
+        while (sortedRuns.size() > 1) {
+            sortedRuns = mergePass(sortedRuns);
+        }
+
+        // 返回所需结果
+        return sortedRuns.get(0);
     }
 
     /**

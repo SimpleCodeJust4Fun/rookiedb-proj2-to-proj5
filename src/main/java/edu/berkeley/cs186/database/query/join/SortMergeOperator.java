@@ -140,6 +140,70 @@ public class SortMergeOperator extends JoinOperator {
          */
         private Record fetchNextRecord() {
             // TODO(proj3_part1): implement
+//            用marked来标记当前是处于匹配阶段还是寻找阶段。
+//
+//            若处于匹配阶段，则不断移动左右迭代器，保证每一次移动都能确保最后左表记录<=右表。然后标记右迭代器当前元素，开始进入匹配阶段。
+//
+//            如果左右记录相等，则匹配成功，继续移动右表记录，若右表无记录可用，则移动左表，并重置右表，重新计入寻找阶段。
+//
+//            如果左右记录不等，代表匹配阶段结束，重置右表并移动左表，重新进入寻找阶段。
+            if (leftRecord == null) {
+                return null;
+            }
+            while (leftRecord != null) {
+                if (!marked) {
+                    while (compare(leftRecord, rightRecord) < 0) {
+                        if (leftIterator.hasNext()) {
+                            leftRecord = leftIterator.next();
+                        } else {
+                            // 若左表已经用完，则代表join结束，直接终止
+                            leftRecord = null;
+                            return null;
+                        }
+                    }
+                    while (compare(leftRecord, rightRecord) > 0) {
+                        if (rightIterator.hasNext()) {
+                            rightRecord = rightIterator.next();
+                        } else {
+                            // 若右表记录全部小于左表当前记录，则代表左表自此之后的记录无法匹配，也可终止。
+                            leftRecord = null;
+                            return null;
+                        }
+                    }
+                    marked = true;
+                    rightIterator.markPrev();
+                }
+                if (compare(leftRecord, rightRecord) == 0) {
+                    // 左右表记录匹配
+                    Record ret = leftRecord.concat(rightRecord);
+                    if (rightIterator.hasNext()) {
+                        rightRecord = rightIterator.next();
+                    } else {
+                        // 若右表记录已经用完，则代表左表当前记录已经完成匹配，前进左表，并重置右表
+                        if (leftIterator.hasNext()) {
+                            leftRecord = leftIterator.next();
+                            marked = false;
+                            rightIterator.reset();
+                            rightRecord = rightIterator.next();
+                        } else {
+                            //
+                            leftRecord = null;
+                        }
+                    }
+                    return ret;
+                } else {
+                    // 左右表记录不匹配，重置右表后，重新进入查询阶段
+                    marked = false;
+                    rightIterator.reset();
+                    rightRecord = rightIterator.next();
+                    if (leftIterator.hasNext()) {
+                        leftRecord = leftIterator.next();
+                    } else {
+                        leftRecord = null;
+                        return null;
+                    }
+                }
+            }
             return null;
         }
 
