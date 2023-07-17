@@ -74,8 +74,9 @@ public class CommandLineInterface {
         while (true) {
             try {
                 input = bufferUserInput(inputScanner);
-                if (input.length() == 0)
+                if (input.length() == 0) {
                     continue;
+                }
                 if (input.startsWith("\\")) {
                     try {
                         parseMetaCommand(input, db);
@@ -142,12 +143,13 @@ public class CommandLineInterface {
             }
             result.append(curr);
 
-            if (numSingleQuote % 2 != 0)
+            if (numSingleQuote % 2 != 0) {
                 this.out.print("'> ");
-            else if (!curr.trim().endsWith(";"))
+            } else if (!curr.trim().endsWith(";")) {
                 this.out.print("-> ");
-            else
+            } else {
                 break;
+            }
             firstLine = false;
         } while (true);
         return result.toString();

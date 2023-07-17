@@ -577,6 +577,19 @@ public class QueryPlan {
         QueryOperator minOp = new SequentialScanOperator(this.transaction, table);
 
         // TODO(proj3_part2): implement
+        int minCost = minOp.estimateIOCost();
+        int index = -1;
+        for (int i : getEligibleIndexColumns(table)) {
+            SelectPredicate sp = this.selectPredicates.get(i);
+            QueryOperator indexScan = new IndexScanOperator(this.transaction, table, sp.column, sp.operator, sp.value);
+            int cost = indexScan.estimateIOCost();
+            if (cost < minCost) {
+                minCost = cost;
+                index = i;
+                minOp = indexScan;
+            }
+        }
+        minOp = addEligibleSelections(minOp, index);
         return minOp;
     }
 
@@ -646,6 +659,49 @@ public class QueryPlan {
         //      calculate the cheapest join with the new table (the one you
         //      fetched an operator for from pass1Map) and the previously joined
         //      tables. Then, update the result map if needed.
+        // 实现JOIN的左深树
+//
+//        此阶段要进行join操作，由于使用的是左深树，因此本题中使用prevMap，以及pass1Map存储表与对应操作的映射。
+//
+//        prevMap<Set<String>, QueryOperator>：存储上一轮pass的join结果，字符串集合用于存储已经被拼接在一起的表。QueryOperator存储最后一次操作的操作符。
+//
+//        pass1Map<Set<String>, QueryOperator>：存储第一轮读取表的结果，集合中只有一个表名，操作符代表读取这张表的操作符。
+//
+//        解题思路：
+//
+//        针对prevMap中的每个表集合，如果包含某个join操作需要用到的表，且该join操作的另一张表尚未被拼接进来，便寻找本次join开销最小的算法，并加入结果集合中。
+//
+//        注意如果是左表还没有被join的情况，则在调用minCostJoinType时要交换左右表参数，避免违背左深树原则。(debug 4小时的血泪教训)
+        for (Set<String> prevSet : prevMap.keySet()) {
+            for (JoinPredicate jp : this.joinPredicates) {
+                Set<String> newSet = new HashSet<>(prevSet);
+                Set<String> tableSet = new HashSet<>();
+                QueryOperator joinQuery;
+                    // case 1
+                if (prevSet.contains(jp.leftTable) && !prevSet.contains(jp.rightTable)) {
+                    tableSet.add(jp.rightTable);
+                    QueryOperator rightQuery = pass1Map.get(tableSet);
+                    joinQuery = minCostJoinType(prevMap.get(prevSet), rightQuery, jp.leftColumn, jp.rightColumn);//顺序决定左深规则
+                    newSet.add(jp.rightTable);
+                } else if (!prevSet.contains(jp.leftTable) && prevSet.contains(jp.rightTable)) {
+                    // case 2
+                    tableSet.add(jp.leftTable);
+                    QueryOperator leftQuery = pass1Map.get(tableSet);
+                    joinQuery = minCostJoinType(prevMap.get(prevSet), leftQuery, jp.rightColumn, jp.leftColumn);//顺序决定左深规则
+                    newSet.add(jp.leftTable);
+                } else {
+                    // case 3
+                    continue;
+                }
+                if (result.containsKey(newSet)) {
+                    if (result.get(newSet).estimateIOCost() > joinQuery.estimateIOCost()) {
+                        result.put(newSet, joinQuery);
+                    }
+                } else {
+                    result.put(newSet, joinQuery);
+                }
+            }
+        }
         return result;
     }
 
@@ -695,7 +751,32 @@ public class QueryPlan {
         // Set the final operator to the lowest cost operator from the last
         // pass, add group by, project, sort and limit operators, and return an
         // iterator over the final operator.
-        return this.executeNaive(); // TODO(proj3_part2): Replace this!
+        // 写个动态规划递归逻辑
+        // 外部驱动方法实现，相当于那个GHJ里的run了
+        // 写了这个可以知道上两个implement中实现的东西是做什么的
+        int passNums = this.tableNames.size();
+        Map<Set<String>, QueryOperator> pass1Map = new HashMap<>();
+        //pass 1
+        for (String tableName : tableNames) {
+            QueryOperator op = minCostSingleAccess(tableName);
+            Set<String> tables = new HashSet<>();
+            tables.add(tableName);
+            pass1Map.put(tables, op);
+        }
+        //pass 2 to pass n
+        Map<Set<String>, QueryOperator> prevMap = pass1Map; //看看这里怎么copy，这样有点naive
+        while (prevMap.size() != 1) {
+            prevMap = minCostJoins(prevMap, pass1Map);//看起来 size=1是终止条件，应该是越join，这个结果集合越小
+        }
+
+        // set final operator
+        this.finalOperator = minCostOperator(prevMap);
+
+        // add other operator in the SQL
+        this.addGroupBy();
+        this.addProject();
+        this.addLimit();
+        return this.finalOperator.iterator();
     }
 
     // EXECUTE NAIVE ///////////////////////////////////////////////////////////
