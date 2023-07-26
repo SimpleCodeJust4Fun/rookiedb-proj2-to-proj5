@@ -10,7 +10,7 @@ public class Lock {
 
     public Lock(ResourceName name, LockType lockType, long transactionNum) {
         this.name = name;
-        this.lockType = lockType;
+        this.lockType = lockType; //
         this.transactionNum = transactionNum;
     }
 
