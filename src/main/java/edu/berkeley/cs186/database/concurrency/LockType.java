@@ -22,8 +22,23 @@ public enum LockType {
             throw new NullPointerException("null lock type");
         }
         // TODO(proj4_part1): implement
+        if (a == LockType.IS && b == LockType.X) {
+            return false;
+        }
+        if (a == LockType.IX && ((b == LockType.S) || (b == LockType.SIX) ||(b == LockType.X))) {
+            return false;
+        }
+        if (a == LockType.S && ((b == LockType.IX) || (b == LockType.SIX) ||(b == LockType.X))) {
+            return false;
+        }
+        if (a == LockType.SIX && ((b == LockType.IX) || (b == LockType.S) || (b == LockType.SIX) ||(b == LockType.X))) {
+            return false;
+        }
+        if (a == LockType.X && ((b == LockType.IS) || (b == LockType.IX) || (b == LockType.S) || (b == LockType.SIX) ||(b == LockType.X))) {
+            return false;
+        }
 
-        return false;
+        return true;
     }
 
     /**
@@ -54,8 +69,11 @@ public enum LockType {
             throw new NullPointerException("null lock type");
         }
         // TODO(proj4_part1): implement
-
-        return false;
+        // 复用，parent是申请时的依赖关系，substitute是申请到锁之后的权力包含关系
+        // parentLock(childLockType)：这个子锁申请前需要的父锁（比如子锁S需要父锁IS），也可以认为真父亲
+        // substitutable(parentLockType, parentLock(childLockType))，这个parentLockType的权限能不能包含childLockType的真父亲
+        // 意思是这个parentLockType能不能比childLockType的真父亲做得更好，从而胜任其养父职责
+        return substitutable(parentLockType, parentLock(childLockType));
     }
 
     /**
@@ -69,8 +87,15 @@ public enum LockType {
             throw new NullPointerException("null lock type");
         }
         // TODO(proj4_part1): implement
-
-        return false;
+        switch (substitute) {
+            case NL: return required == NL;
+            case IS: return required == NL || required == IS;
+            case IX: return required == NL || required == IS || required == IX;
+            case S : return required == NL || required == IS || required == S;
+            case SIX : return !(required == X);
+            case X : return true;
+            default: throw new UnsupportedOperationException("bad lock type");
+        }
     }
 
     /**
