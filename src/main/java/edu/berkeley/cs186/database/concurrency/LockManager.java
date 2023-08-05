@@ -291,6 +291,7 @@ public class LockManager {
                 shouldBlock = true;
                 LockRequest newRequest = new LockRequest(transaction, newLock);
                 resourceEntry.addToQueue(newRequest, false);
+                transaction.prepareBlock();
             } else {
                 resourceEntry.grantOrUpdateLock(newLock);
             }
@@ -353,7 +354,24 @@ public class LockManager {
         // You may modify any part of this method.
         boolean shouldBlock = false;
         synchronized (this) {
-            
+            LockType exist = getLockType(transaction, name);
+            ResourceEntry resourceEntry = getResourceEntry(name);
+            if (exist == newLockType) {
+                throw new DuplicateLockRequestException("duplicate request");
+            } else if (exist == LockType.NL) {
+                throw new NoLockHeldException("no lock");
+            } else if (!LockType.substitutable(newLockType, exist)) {
+                throw new InvalidLockException("invalid locktype");
+            }
+            Lock newLock = new Lock(name, newLockType, transaction.getTransNum());
+            if (!resourceEntry.checkCompatible(newLockType, transaction.getTransNum())) {
+                shouldBlock = true;
+                LockRequest lockRequest = new LockRequest(transaction, newLock);
+                resourceEntry.addToQueue(lockRequest, true);
+                transaction.prepareBlock();
+            } else {
+                resourceEntry.grantOrUpdateLock(newLock);
+            }
         }
         if (shouldBlock) {
             transaction.block();
