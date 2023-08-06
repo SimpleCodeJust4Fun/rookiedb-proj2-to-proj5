@@ -115,7 +115,8 @@ public class PageDirectory implements BacktrackingIterable<Page> {
         Page page = this.firstHeader.loadPageWithSpace(requiredSpace);
         LockContext pageContext = lockContext.childContext(page.getPageNum());
         // TODO(proj4_part2): Update the following line
-        LockUtil.ensureSufficientLockHeld(pageContext, LockType.NL);
+        LockUtil.ensureSufficientLockHeld(pageContext, LockType.X);
+        // 页目录pageDirectory是关键结构，需要独占
 
         return new DataPage(pageDirectoryId, page);
     }
